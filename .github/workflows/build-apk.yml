@@ -23,8 +23,8 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk SOHEIL-v0.2-alpha.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk SOHEIL-v0.3-alpha.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: SOHEIL-v0.2-alpha-apk
-          path: SOHEIL-v0.2-alpha.apk
+          name: SOHEIL-v0.3-alpha-apk
+          path: SOHEIL-v0.3-alpha.apk
