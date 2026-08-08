@@ -50,7 +50,7 @@ jobs:
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
           cp app/build/outputs/apk/release/app-release.apk SOHEIL-v0.3.1-security-release.apk
           sha256sum SOHEIL-v0.3.1-security-release.apk > SOHEIL-v0.3.1-security-release.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SOHEIL-v0.3.1-security-release
           path: |
