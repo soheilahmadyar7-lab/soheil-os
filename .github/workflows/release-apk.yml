@@ -22,7 +22,7 @@ jobs:
           test -n "$STORE_PASSWORD" || (echo "Missing SOHEIL_KEYSTORE_PASSWORD" && exit 1)
           test -n "$KEY_ALIAS" || (echo "Missing SOHEIL_KEY_ALIAS" && exit 1)
           test -n "$KEY_PASSWORD" || (echo "Missing SOHEIL_KEY_PASSWORD" && exit 1)
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
