@@ -1,5 +1,10 @@
 plugins { id 'com.android.application' }
 
+def releaseKeystorePath = System.getenv('SOHEIL_KEYSTORE_PATH')
+def releaseStorePassword = System.getenv('SOHEIL_KEYSTORE_PASSWORD')
+def releaseKeyAlias = System.getenv('SOHEIL_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('SOHEIL_KEY_PASSWORD')
+
 android {
     namespace 'com.soheil.lifeos'
     compileSdk 35
@@ -17,9 +22,24 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    signingConfigs {
+        release {
+            if (releaseKeystorePath) {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+                enableV4Signing true
+            }
+        }
+    }
+
     buildTypes {
         debug {
-            // Security-test APKs are intentionally non-debuggable even though they use test signing.
+            // Security-test APKs are non-debuggable but still use test signing.
             debuggable false
             minifyEnabled false
         }
@@ -28,7 +48,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // Production signing is injected only from CI secrets; never from source control.
+            if (releaseKeystorePath) signingConfig signingConfigs.release
         }
     }
 }
