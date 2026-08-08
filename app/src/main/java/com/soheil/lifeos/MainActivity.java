@@ -1,453 +1,71 @@
 package com.soheil.lifeos;
 
+import android.Manifest;
 import android.app.Activity;
-import android.os.Build;
-import android.os.Bundle;
-import android.text.InputType;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
+import android.os.Bundle;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
-import android.view.Window;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
-import android.content.SharedPreferences;
-import java.util.Calendar;
+import android.widget.Toast;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
-    private static final int BG = Color.rgb(8, 12, 17);
-    private static final int PANEL = Color.rgb(17, 24, 32);
-    private static final int PANEL_2 = Color.rgb(22, 31, 41);
-    private static final int TEXT = Color.rgb(239, 244, 248);
-    private static final int MUTED = Color.rgb(144, 158, 171);
-    private static final int ACCENT = Color.rgb(80, 227, 194);
-    private static final int ACCENT_DARK = Color.rgb(18, 55, 49);
-    private static final int STROKE = Color.rgb(39, 50, 62);
-
-    private LinearLayout root;
-    private LinearLayout content;
-    private LinearLayout navBar;
+    private static final int BG=Color.rgb(7,11,16), PANEL=Color.rgb(16,23,31), PANEL2=Color.rgb(21,30,39);
+    private static final int TEXT=Color.rgb(239,244,248), MUTED=Color.rgb(139,154,169), ACCENT=Color.rgb(83,229,194), STROKE=Color.rgb(38,50,62);
+    private LinearLayout root,content,navBar;
     private SharedPreferences prefs;
-    private int activeTab = 0;
+    private SoheilDb db;
+    private JarvisEngine jarvis;
 
-    @Override public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        prefs = getSharedPreferences("soheil", MODE_PRIVATE);
-        Window w = getWindow();
-        w.setStatusBarColor(BG);
-        w.setNavigationBarColor(BG);
-        showShell();
-        showToday();
-    }
+    @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);prefs=getSharedPreferences("soheil",MODE_PRIVATE);db=new SoheilDb(this);jarvis=new JarvisEngine(db);migrateAlphaData();ensureNotificationPermission();showShell();showToday();}
 
-    private int dp(int value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
-    }
+    private void migrateAlphaData(){if(prefs.getBoolean("v03_migrated",false))return;String old=prefs.getString("last_capture","");if(!old.trim().isEmpty())db.addCapture(old.trim());prefs.edit().putBoolean("v03_migrated",true).apply();}
+    private void ensureNotificationPermission(){if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},90);}
+    private int dp(int x){return(int)(x*getResources().getDisplayMetrics().density+.5f);}
+    private GradientDrawable bg(int color,int radius,int stroke){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(radius));if(stroke!=Color.TRANSPARENT)g.setStroke(dp(1),stroke);return g;}
+    private TextView txt(String s,float size,int color,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);v.setTypeface(Typeface.create("sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));v.setTextDirection(View.TEXT_DIRECTION_RTL);v.setGravity(Gravity.RIGHT);v.setLineSpacing(0,1.12f);return v;}
+    private LinearLayout card(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(17),dp(16),dp(17),dp(16));c.setBackground(bg(PANEL,20,STROKE));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,0,0,dp(12));c.setLayoutParams(p);return c;}
+    private TextView chip(String s){TextView v=txt(s,11,ACCENT,true);v.setGravity(Gravity.CENTER);v.setTextDirection(View.TEXT_DIRECTION_LTR);v.setPadding(dp(10),dp(6),dp(10),dp(6));v.setBackground(bg(Color.rgb(15,51,45),30,Color.TRANSPARENT));return v;}
+    private Button button(String s,boolean primary){Button b=new Button(this);b.setText(s);b.setTextSize(14);b.setAllCaps(false);b.setTypeface(Typeface.DEFAULT_BOLD);b.setTextColor(primary?Color.rgb(4,23,19):TEXT);b.setBackground(bg(primary?ACCENT:PANEL2,15,primary?Color.TRANSPARENT:STROKE));b.setMinHeight(dp(49));return b;}
+    private EditText input(String hint,boolean multi){EditText e=new EditText(this);e.setHint(hint);e.setHintTextColor(Color.rgb(97,114,129));e.setTextColor(TEXT);e.setTextSize(15);e.setTextDirection(View.TEXT_DIRECTION_RTL);e.setGravity((multi?Gravity.TOP:Gravity.CENTER_VERTICAL)|Gravity.RIGHT);e.setPadding(dp(15),dp(13),dp(15),dp(13));e.setBackground(bg(PANEL2,15,STROKE));e.setInputType(InputType.TYPE_CLASS_TEXT|(multi?InputType.TYPE_TEXT_FLAG_MULTI_LINE:0));return e;}
+    private void gap(LinearLayout p,int h){View v=new View(this);p.addView(v,new LinearLayout.LayoutParams(1,dp(h)));}
+    private String fmt(long ms){if(ms<=0)return"بدون زمان";return new SimpleDateFormat("MMM d • HH:mm",Locale.getDefault()).format(new Date(ms));}
 
-    private GradientDrawable shape(int color, int radiusDp, int strokeColor) {
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(color);
-        g.setCornerRadius(dp(radiusDp));
-        if (strokeColor != Color.TRANSPARENT) g.setStroke(dp(1), strokeColor);
-        return g;
-    }
+    private void showShell(){root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(BG);root.setOnApplyWindowInsetsListener((v,i)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets x=i.getInsets(WindowInsets.Type.systemBars());top=x.top;bottom=x.bottom;}else{top=i.getSystemWindowInsetTop();bottom=i.getSystemWindowInsetBottom();}root.setPadding(0,top,0,bottom);return i;});LinearLayout header=new LinearLayout(this);header.setOrientation(LinearLayout.HORIZONTAL);header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(18),dp(12),dp(18),dp(8));TextView brand=txt("SOHEIL",20,TEXT,true);brand.setTextDirection(View.TEXT_DIRECTION_LTR);brand.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);header.addView(brand,new LinearLayout.LayoutParams(0,dp(42),1));header.addView(chip("● JARVIS LOCAL"));root.addView(header);ScrollView sc=new ScrollView(this);sc.setFillViewport(true);content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(17),dp(8),dp(17),dp(26));sc.addView(content);root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));navBar=new LinearLayout(this);navBar.setOrientation(LinearLayout.HORIZONTAL);navBar.setPadding(dp(7),dp(7),dp(7),dp(9));navBar.setBackgroundColor(Color.rgb(9,14,20));nav("⌂\nامروز",0,()->showToday());nav("✓\nکارها",1,()->showTasks());nav("＋\nثبت",2,()->showCapture());nav("✦\nجارویس",3,()->showJarvis());nav("●\nمن",4,()->showMe());root.addView(navBar,new LinearLayout.LayoutParams(-1,dp(76)));setContentView(root);root.requestApplyInsets();selectNav(0);}
+    private void nav(String s,int idx,Runnable r){TextView v=txt(s,12,MUTED,false);v.setGravity(Gravity.CENTER);v.setPadding(dp(3),dp(6),dp(3),dp(6));v.setOnClickListener(x->{selectNav(idx);r.run();});LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(3),0,dp(3),0);navBar.addView(v,p);}
+    private void selectNav(int n){if(navBar==null)return;for(int i=0;i<navBar.getChildCount();i++){TextView v=(TextView)navBar.getChildAt(i);boolean on=i==n;v.setTextColor(on?ACCENT:MUTED);v.setTypeface(Typeface.create("sans-serif",on?Typeface.BOLD:Typeface.NORMAL));v.setBackground(bg(on?Color.rgb(15,51,45):Color.TRANSPARENT,17,Color.TRANSPARENT));}}
+    private void clear(){content.removeAllViews();}
+    private void heading(String t,String s){content.addView(txt(t,29,TEXT,true));TextView x=txt(s,13,MUTED,false);x.setPadding(0,dp(4),0,0);content.addView(x);gap(content,17);}
 
-    private TextView label(String value, float size, int color, boolean bold) {
-        TextView v = new TextView(this);
-        v.setText(value);
-        v.setTextSize(size);
-        v.setTextColor(color);
-        v.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
-        v.setTextDirection(View.TEXT_DIRECTION_RTL);
-        v.setGravity(Gravity.RIGHT);
-        v.setLineSpacing(0, 1.12f);
-        return v;
-    }
+    private void showToday(){clear();selectNav(0);heading("امروز","Morning Brief • مرکز فرمان");String focus=prefs.getString("today_focus","");LinearLayout brief=card();brief.addView(chip("JARVIS BRIEF"));TextView b=txt(jarvis.morningBrief(focus),16,TEXT,false);b.setPadding(0,dp(13),0,0);brief.addView(b);content.addView(brief);LinearLayout f=card();f.addView(txt("تمرکز اصلی",18,TEXT,true));TextView current=txt(focus.isEmpty()?"هنوز تعیین نشده":focus,20,focus.isEmpty()?MUTED:TEXT,true);current.setPadding(0,dp(10),0,dp(11));f.addView(current);EditText fi=input("یک نتیجه مهم برای امروز…",false);f.addView(fi,new LinearLayout.LayoutParams(-1,dp(54)));gap(f,9);Button save=button(focus.isEmpty()?"ثبت Focus":"تغییر Focus",true);save.setOnClickListener(v->{String s=fi.getText().toString().trim();if(!s.isEmpty()){prefs.edit().putString("today_focus",s).apply();showToday();}});f.addView(save,new LinearLayout.LayoutParams(-1,dp(50)));content.addView(f);LinearLayout tasks=card();LinearLayout tr=new LinearLayout(this);tr.setOrientation(LinearLayout.HORIZONTAL);tr.setGravity(Gravity.CENTER_VERTICAL);tr.addView(txt("کارهای باز",18,TEXT,true),new LinearLayout.LayoutParams(0,-2,1));tr.addView(chip(String.valueOf(db.openTaskCount())));tasks.addView(tr);List<SoheilDb.Task> list=db.getOpenTasks(3);if(list.isEmpty()){TextView z=txt("فعلاً Task بازی نداری.",14,MUTED,false);z.setPadding(0,dp(12),0,0);tasks.addView(z);}else for(SoheilDb.Task t:list){TextView line=txt("•  "+t.title+"\n   "+t.area+"  •  "+fmt(t.dueAt),14,TEXT,false);line.setPadding(0,dp(11),0,0);tasks.addView(line);}gap(tasks,12);Button all=button("مدیریت همه کارها",false);all.setOnClickListener(v->showTasks());tasks.addView(all,new LinearLayout.LayoutParams(-1,dp(48)));content.addView(tasks);LinearLayout inbox=card();inbox.addView(txt("Inbox",18,TEXT,true));TextView ic=txt(db.inboxCount()+" مورد منتظر تصمیم توست",14,db.inboxCount()>0?ACCENT:MUTED,true);ic.setPadding(0,dp(8),0,dp(11));inbox.addView(ic);Button cap=button("＋ Capture سریع",true);cap.setOnClickListener(v->showCapture());inbox.addView(cap,new LinearLayout.LayoutParams(-1,dp(49)));content.addView(inbox);}
 
-    private TextView sectionTitle(String title, String eyebrow) {
-        LinearLayout box = new LinearLayout(this);
-        return label(title, 26, TEXT, true);
-    }
+    private void showCapture(){clear();selectNav(2);heading("Capture","فکر را ذخیره کن؛ بعداً تصمیم بگیر چه چیزی است");LinearLayout c=card();c.addView(chip("UNIVERSAL INBOX"));EditText e=input("فکر، کار، سؤال، ایده…",true);e.setMinLines(5);gap(c,12);c.addView(e,new LinearLayout.LayoutParams(-1,dp(170)));gap(c,10);Button add=button("ذخیره در Inbox",true);add.setOnClickListener(v->{String s=e.getText().toString().trim();if(!s.isEmpty()){db.addCapture(s);e.setText("");Toast.makeText(this,"در Inbox ذخیره شد",Toast.LENGTH_SHORT).show();showCapture();}});c.addView(add,new LinearLayout.LayoutParams(-1,dp(51)));content.addView(c);content.addView(txt("Inbox",20,TEXT,true));gap(content,9);List<SoheilDb.Capture> list=db.getInbox(12);if(list.isEmpty())content.addView(txt("Inbox خالی است. ذهن باز، سیستم تمیز.",14,MUTED,false));for(SoheilDb.Capture x:list){LinearLayout item=card();item.addView(txt(x.text,15,TEXT,false));LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setPadding(0,dp(12),0,0);Button task=button("Task",true);Button mem=button("Memory",false);Button done=button("Done",false);task.setOnClickListener(v->{db.captureToTask(x);showCapture();});mem.setOnClickListener(v->{db.captureToMemory(x);showCapture();});done.setOnClickListener(v->{db.markCapture(x.id,"DONE",1);showCapture();});LinearLayout.LayoutParams p1=new LinearLayout.LayoutParams(0,dp(44),1);p1.setMargins(dp(3),0,dp(3),0);row.addView(task,p1);LinearLayout.LayoutParams p2=new LinearLayout.LayoutParams(0,dp(44),1);p2.setMargins(dp(3),0,dp(3),0);row.addView(mem,p2);LinearLayout.LayoutParams p3=new LinearLayout.LayoutParams(0,dp(44),1);p3.setMargins(dp(3),0,dp(3),0);row.addView(done,p3);item.addView(row);content.addView(item);}}
 
-    private void addGap(int dpValue) {
-        View gap = new View(this);
-        content.addView(gap, new LinearLayout.LayoutParams(1, dp(dpValue)));
-    }
+    private void showTasks(){clear();selectNav(1);heading("کارها","Task Manager + Reminder");LinearLayout add=card();EditText title=input("عنوان کار…",false);add.addView(title,new LinearLayout.LayoutParams(-1,dp(54)));gap(add,9);EditText minutes=input("یادآوری بعد از چند دقیقه (اختیاری)",false);minutes.setInputType(InputType.TYPE_CLASS_NUMBER);add.addView(minutes,new LinearLayout.LayoutParams(-1,dp(54)));gap(add,9);Button save=button("اضافه کردن Task",true);save.setOnClickListener(v->{String s=title.getText().toString().trim();if(s.isEmpty())return;long due=0;try{int m=Integer.parseInt(minutes.getText().toString().trim());if(m>0)due=System.currentTimeMillis()+m*60000L;}catch(Exception ignored){}long id=db.addTask(s,"شخصی",2,due);if(due>0)scheduleReminder(id,s,due);showTasks();});add.addView(save,new LinearLayout.LayoutParams(-1,dp(51)));content.addView(add);List<SoheilDb.Task> list=db.getOpenTasks(50);if(list.isEmpty())content.addView(txt("هیچ Task بازی وجود ندارد.",14,MUTED,false));for(SoheilDb.Task t:list){LinearLayout item=card();LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.HORIZONTAL);top.setGravity(Gravity.CENTER_VERTICAL);TextView titlev=txt(t.title,16,TEXT,true);top.addView(titlev,new LinearLayout.LayoutParams(0,-2,1));Button done=button("✓",true);done.setOnClickListener(v->{db.completeTask(t.id);showTasks();});top.addView(done,new LinearLayout.LayoutParams(dp(52),dp(45)));item.addView(top);TextView meta=txt(t.area+"  •  "+fmt(t.dueAt),12,t.dueAt>0?ACCENT:MUTED,false);meta.setPadding(0,dp(7),0,0);item.addView(meta);content.addView(item);}}
+    private void scheduleReminder(long id,String title,long at){AlarmManager am=(AlarmManager)getSystemService(ALARM_SERVICE);Intent in=new Intent(this,ReminderReceiver.class);in.putExtra("title",title);PendingIntent pi=PendingIntent.getBroadcast(this,(int)(id%Integer.MAX_VALUE),in,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi);Toast.makeText(this,"Reminder تنظیم شد",Toast.LENGTH_SHORT).show();}
 
-    private LinearLayout card() {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(16), dp(18), dp(16));
-        card.setBackground(shape(PANEL, 20, STROKE));
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        p.setMargins(0, 0, 0, dp(12));
-        card.setLayoutParams(p);
-        return card;
-    }
+    private void showJarvis(){clear();selectNav(3);heading("Jarvis","Context از Task، Inbox، Memory و Check-in همین گوشی");List<SoheilDb.Message> msgs=db.recentMessages(8);for(SoheilDb.Message m:msgs){LinearLayout bubble=card();TextView role=txt(m.role.equals("user")?"YOU":"JARVIS",10,m.role.equals("user")?MUTED:ACCENT,true);role.setTextDirection(View.TEXT_DIRECTION_LTR);role.setGravity(Gravity.LEFT);bubble.addView(role);TextView body=txt(m.text,15,TEXT,false);body.setPadding(0,dp(8),0,0);bubble.addView(body);content.addView(bubble);}LinearLayout askbox=card();EditText q=input("از Jarvis بپرس…",true);q.setMinLines(3);askbox.addView(q,new LinearLayout.LayoutParams(-1,dp(110)));gap(askbox,9);Button ask=button("Ask Jarvis ✦",true);ask.setOnClickListener(v->{String query=q.getText().toString().trim();if(query.isEmpty())return;db.addMessage("user",query);String a=jarvis.answer(query,prefs.getString("today_focus",""));db.addMessage("jarvis",a);showJarvis();});askbox.addView(ask,new LinearLayout.LayoutParams(-1,dp(51)));content.addView(askbox);}
 
-    private TextView chip(String text) {
-        TextView chip = label(text, 12, ACCENT, true);
-        chip.setGravity(Gravity.CENTER);
-        chip.setPadding(dp(10), dp(6), dp(10), dp(6));
-        chip.setBackground(shape(ACCENT_DARK, 30, Color.TRANSPARENT));
-        return chip;
-    }
-
-    private Button primaryButton(String title) {
-        Button b = new Button(this);
-        b.setText(title);
-        b.setTextSize(15);
-        b.setTextColor(Color.rgb(4, 21, 18));
-        b.setTypeface(Typeface.DEFAULT_BOLD);
-        b.setAllCaps(false);
-        b.setGravity(Gravity.CENTER);
-        b.setPadding(dp(16), 0, dp(16), 0);
-        b.setBackground(shape(ACCENT, 16, Color.TRANSPARENT));
-        b.setMinHeight(dp(52));
-        return b;
-    }
-
-    private Button secondaryButton(String title) {
-        Button b = new Button(this);
-        b.setText(title);
-        b.setTextSize(14);
-        b.setTextColor(TEXT);
-        b.setAllCaps(false);
-        b.setGravity(Gravity.CENTER);
-        b.setPadding(dp(14), 0, dp(14), 0);
-        b.setBackground(shape(PANEL_2, 16, STROKE));
-        b.setMinHeight(dp(50));
-        return b;
-    }
-
-    private EditText inputBox(String hint, boolean multiline) {
-        EditText input = new EditText(this);
-        input.setHint(hint);
-        input.setHintTextColor(Color.rgb(103, 119, 133));
-        input.setTextColor(TEXT);
-        input.setTextSize(16);
-        input.setBackground(shape(PANEL_2, 16, STROKE));
-        input.setPadding(dp(16), dp(14), dp(16), dp(14));
-        input.setTextDirection(View.TEXT_DIRECTION_RTL);
-        input.setGravity((multiline ? Gravity.TOP : Gravity.CENTER_VERTICAL) | Gravity.RIGHT);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | (multiline ? InputType.TYPE_TEXT_FLAG_MULTI_LINE : 0));
-        if (multiline) input.setMinLines(6);
-        return input;
-    }
-
-    private void showShell() {
-        root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BG);
-
-        root.setOnApplyWindowInsetsListener((v, insets) -> {
-            int top;
-            int bottom;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
-                top = bars.top;
-                bottom = bars.bottom;
-            } else {
-                top = insets.getSystemWindowInsetTop();
-                bottom = insets.getSystemWindowInsetBottom();
-            }
-            root.setPadding(0, top, 0, bottom);
-            return insets;
-        });
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(20), dp(14), dp(20), dp(10));
-
-        TextView brand = label("SOHEIL", 20, TEXT, true);
-        brand.setTextDirection(View.TEXT_DIRECTION_LTR);
-        brand.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
-        header.addView(brand, new LinearLayout.LayoutParams(0, dp(44), 1f));
-
-        TextView jarvisState = chip("●  JARVIS LOCAL");
-        jarvisState.setTextDirection(View.TEXT_DIRECTION_LTR);
-        header.addView(jarvisState);
-        root.addView(header);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setClipToPadding(false);
-        content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(18), dp(10), dp(18), dp(26));
-        scroll.addView(content);
-        root.addView(scroll, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-
-        navBar = new LinearLayout(this);
-        navBar.setOrientation(LinearLayout.HORIZONTAL);
-        navBar.setGravity(Gravity.CENTER);
-        navBar.setPadding(dp(8), dp(8), dp(8), dp(10));
-        navBar.setBackgroundColor(Color.rgb(10, 15, 21));
-        addNavItem("⌂\nامروز", 0, () -> showToday());
-        addNavItem("＋\nثبت", 1, () -> showCapture());
-        addNavItem("◫\nزندگی", 2, () -> showLife());
-        addNavItem("✦\nجارویس", 3, () -> showJarvis());
-        addNavItem("●\nمن", 4, () -> showMe());
-        root.addView(navBar, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(76)));
-
-        setContentView(root);
-        root.requestApplyInsets();
-        updateNav(0);
-    }
-
-    private void addNavItem(String text, int index, Runnable action) {
-        TextView item = label(text, 12, MUTED, false);
-        item.setGravity(Gravity.CENTER);
-        item.setTextDirection(View.TEXT_DIRECTION_RTL);
-        item.setPadding(dp(4), dp(7), dp(4), dp(7));
-        item.setOnClickListener(v -> {
-            activeTab = index;
-            updateNav(index);
-            action.run();
-        });
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
-        p.setMargins(dp(3), 0, dp(3), 0);
-        navBar.addView(item, p);
-    }
-
-    private void updateNav(int selected) {
-        activeTab = selected;
-        if (navBar == null) return;
-        for (int i = 0; i < navBar.getChildCount(); i++) {
-            TextView v = (TextView) navBar.getChildAt(i);
-            boolean on = i == selected;
-            v.setTextColor(on ? ACCENT : MUTED);
-            v.setTypeface(Typeface.create("sans-serif", on ? Typeface.BOLD : Typeface.NORMAL));
-            v.setBackground(on ? shape(ACCENT_DARK, 18, Color.TRANSPARENT) : shape(Color.TRANSPARENT, 18, Color.TRANSPARENT));
-        }
-    }
-
-    private void clear() {
-        content.removeAllViews();
-    }
-
-    private void pageHeading(String title, String subtitle) {
-        TextView t = label(title, 30, TEXT, true);
-        content.addView(t);
-        TextView s = label(subtitle, 14, MUTED, false);
-        s.setPadding(0, dp(4), 0, 0);
-        content.addView(s);
-        addGap(18);
-    }
-
-    private String greeting() {
-        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        if (hour < 12) return "صبح بخیر";
-        if (hour < 18) return "بعدازظهر بخیر";
-        return "شب بخیر";
-    }
-
-    private void showToday() {
-        clear();
-        updateNav(0);
-        pageHeading(greeting(), "مرکز فرمان امروز");
-
-        LinearLayout focus = card();
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView eyebrow = label("WHAT MATTERS NOW", 11, ACCENT, true);
-        eyebrow.setTextDirection(View.TEXT_DIRECTION_LTR);
-        eyebrow.setGravity(Gravity.LEFT);
-        row.addView(eyebrow, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        row.addView(chip("FOCUS"));
-        focus.addView(row);
-
-        String savedFocus = prefs.getString("today_focus", "");
-        TextView focusText = label(savedFocus.isEmpty() ? "مهم‌ترین کار امروز را مشخص کن" : savedFocus, 21, TEXT, true);
-        focusText.setPadding(0, dp(15), 0, dp(13));
-        focus.addView(focusText);
-
-        EditText focusInput = inputBox("مثلاً: ۴۵ دقیقه کار عمیق روی مهم‌ترین هدف", false);
-        focus.addView(focusInput, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)));
-        View fg = new View(this); focus.addView(fg, new LinearLayout.LayoutParams(1, dp(10)));
-        Button setFocus = primaryButton(savedFocus.isEmpty() ? "ثبت تمرکز امروز" : "تغییر تمرکز");
-        setFocus.setOnClickListener(v -> {
-            String s = focusInput.getText().toString().trim();
-            if (!s.isEmpty()) {
-                prefs.edit().putString("today_focus", s).apply();
-                showToday();
-            }
-        });
-        focus.addView(setFocus);
-        content.addView(focus);
-
-        LinearLayout quick = card();
-        quick.addView(label("ورودی سریع", 18, TEXT, true));
-        TextView q = label("فکر را نگه ندار؛ مستقیم وارد سیستمش کن.", 14, MUTED, false);
-        q.setPadding(0, dp(5), 0, dp(14));
-        quick.addView(q);
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        Button capture = primaryButton("＋  Capture");
-        capture.setOnClickListener(v -> { updateNav(1); showCapture(); });
-        Button ask = secondaryButton("✦  Ask Jarvis");
-        ask.setOnClickListener(v -> { updateNav(3); showJarvis(); });
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, dp(52), 1f);
-        bp.setMargins(0, 0, dp(6), 0);
-        buttons.addView(capture, bp);
-        LinearLayout.LayoutParams bp2 = new LinearLayout.LayoutParams(0, dp(52), 1f);
-        bp2.setMargins(dp(6), 0, 0, 0);
-        buttons.addView(ask, bp2);
-        quick.addView(buttons);
-        content.addView(quick);
-
-        LinearLayout status = card();
-        status.addView(label("وضعیت سیستم", 18, TEXT, true));
-        int count = prefs.getInt("capture_count", 0);
-        String last = prefs.getString("last_capture", "");
-        TextView metrics = label("Captureها  " + count + "     •     Jarvis  Local", 14, ACCENT, true);
-        metrics.setPadding(0, dp(10), 0, dp(8));
-        status.addView(metrics);
-        status.addView(label(last.isEmpty() ? "هنوز چیزی ثبت نکرده‌ای." : "آخرین ثبت:  " + last, 14, MUTED, false));
-        content.addView(status);
-    }
-
-    private void showCapture() {
-        clear();
-        updateNav(1);
-        pageHeading("Capture", "هر چیزی که در ذهن باز مانده، اینجا تخلیه کن");
-
-        LinearLayout c = card();
-        c.addView(chip("UNIVERSAL INBOX"));
-        TextView prompt = label("فکر، کار، سؤال یا ایده را بدون مرتب‌سازی بنویس.", 17, TEXT, true);
-        prompt.setPadding(0, dp(14), 0, dp(12));
-        c.addView(prompt);
-        EditText input = inputBox("اینجا بنویس…", true);
-        c.addView(input, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190)));
-        View gap = new View(this); c.addView(gap, new LinearLayout.LayoutParams(1, dp(12)));
-        TextView result = label("", 13, ACCENT, true);
-        c.addView(result);
-        Button save = primaryButton("ذخیره در SOHEIL");
-        save.setOnClickListener(v -> {
-            String s = input.getText().toString().trim();
-            if (!s.isEmpty()) {
-                int count = prefs.getInt("capture_count", 0) + 1;
-                prefs.edit().putString("last_capture", s).putInt("capture_count", count).apply();
-                input.setText("");
-                result.setText("✓ ثبت شد. Jarvis در نسخه‌های بعدی آن را طبقه‌بندی می‌کند.");
-            }
-        });
-        c.addView(save, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)));
-        content.addView(c);
-    }
-
-    private LinearLayout lifeMiniCard(String title, String subtitle, String symbol) {
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setPadding(dp(14), dp(14), dp(14), dp(14));
-        c.setBackground(shape(PANEL, 18, STROKE));
-        TextView icon = label(symbol, 21, ACCENT, true);
-        icon.setGravity(Gravity.RIGHT);
-        c.addView(icon);
-        TextView t = label(title, 16, TEXT, true);
-        t.setPadding(0, dp(8), 0, dp(3));
-        c.addView(t);
-        c.addView(label(subtitle, 12, MUTED, false));
-        return c;
-    }
-
-    private void addLifeRow(LinearLayout parent, LinearLayout left, LinearLayout right) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams p1 = new LinearLayout.LayoutParams(0, dp(126), 1f);
-        p1.setMargins(0, 0, dp(6), dp(12));
-        LinearLayout.LayoutParams p2 = new LinearLayout.LayoutParams(0, dp(126), 1f);
-        p2.setMargins(dp(6), 0, 0, dp(12));
-        row.addView(left, p1);
-        row.addView(right, p2);
-        parent.addView(row);
-    }
-
-    private void showLife() {
-        clear();
-        updateNav(2);
-        pageHeading("Life", "نقشه‌ی کل زندگی در یک نگاه");
-        LinearLayout grid = new LinearLayout(this);
-        grid.setOrientation(LinearLayout.VERTICAL);
-        addLifeRow(grid, lifeMiniCard("سلامت", "بدن • خواب • ورزش", "♥"), lifeMiniCard("یادگیری", "مطالعه • مهارت", "◇"));
-        addLifeRow(grid, lifeMiniCard("کار", "پروژه‌ها • شیفت", "▣"), lifeMiniCard("روابط", "افراد • پیگیری", "◎"));
-        addLifeRow(grid, lifeMiniCard("مالی", "تصمیم‌ها • روند", "↗"), lifeMiniCard("شخصی", "اهداف • زندگی", "✦"));
-        content.addView(grid);
-        content.addView(label("این کارت‌ها از نسخه‌ی بعد به داده، هدف و روند واقعی هر حوزه متصل می‌شوند.", 13, MUTED, false));
-    }
-
-    private void showJarvis() {
-        clear();
-        updateNav(3);
-        pageHeading("Jarvis", "لایه‌ی هوشمند SOHEIL — فعلاً Local Mode");
-
-        LinearLayout context = card();
-        context.addView(chip("CONTEXT ONLINE"));
-        String focus = prefs.getString("today_focus", "ثبت نشده");
-        String cap = prefs.getString("last_capture", "ثبت نشده");
-        TextView ctext = label("تمرکز امروز: " + focus + "\n\nآخرین Capture: " + cap, 14, MUTED, false);
-        ctext.setPadding(0, dp(12), 0, 0);
-        context.addView(ctext);
-        content.addView(context);
-
-        LinearLayout chat = card();
-        TextView answer = label("من آماده‌ام. فعلاً از اطلاعات محلی همین گوشی استفاده می‌کنم.", 16, TEXT, false);
-        answer.setPadding(0, 0, 0, dp(14));
-        chat.addView(answer);
-        EditText input = inputBox("از Jarvis بپرس…", false);
-        chat.addView(input, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)));
-        View gap = new View(this); chat.addView(gap, new LinearLayout.LayoutParams(1, dp(10)));
-        Button ask = primaryButton("Ask Jarvis  ✦");
-        ask.setOnClickListener(v -> {
-            String q = input.getText().toString().trim();
-            String last = prefs.getString("last_capture", "");
-            String currentFocus = prefs.getString("today_focus", "");
-            String a;
-            if (q.contains("امروز") || q.contains("کار") || q.contains("تمرکز")) {
-                a = currentFocus.isEmpty()
-                        ? "هنوز تمرکز اصلی امروز را ثبت نکرده‌ای. از صفحه امروز یک کار اصلی انتخاب کن."
-                        : "تمرکز اصلی امروزت «" + currentFocus + "» است. قبل از اضافه کردن کار جدید، همین را جلو ببر.";
-            } else if (q.contains("یاد") || q.contains("حافظ")) {
-                a = "در Alpha فعلی من Focus و آخرین Capture را می‌بینم. Memory Engine کامل بعد از تثبیت UI فعال می‌شود.";
-            } else if (!last.isEmpty()) {
-                a = "آخرین چیزی که وارد سیستم کردی این بود: «" + last + "». فعلاً Local Mode هستم؛ در نسخه AI آن را با حافظه و Context کامل تحلیل می‌کنم.";
-            } else {
-                a = "فعلاً داده‌ی کافی ندارم. یک Focus یا Capture ثبت کن تا Context محلی من شکل بگیرد.";
-            }
-            answer.setText(a);
-        });
-        chat.addView(ask, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)));
-        content.addView(chat);
-    }
-
-    private void showMe() {
-        clear();
-        updateNav(4);
-        pageHeading("Me", "وضعیت SOHEIL و دسترسی‌های Jarvis");
-
-        LinearLayout c = card();
-        c.addView(label("SOHEIL", 22, TEXT, true));
-        TextView version = label("v0.2.1-alpha  •  UI Rescue", 13, ACCENT, true);
-        version.setPadding(0, dp(5), 0, dp(16));
-        c.addView(version);
-        c.addView(label("Jarvis Local    فعال\nStorage          روی گوشی\nCloud AI        هنوز متصل نشده\nSystem Insets   Safe", 15, MUTED, false));
-        content.addView(c);
-
-        LinearLayout privacy = card();
-        privacy.addView(label("JARVIS ACCESS", 12, ACCENT, true));
-        TextView p = label("در این Alpha فقط Focus و Captureهای داخل خود SOHEIL خوانده می‌شوند. هیچ Calendar، Health یا فایل دیگری بدون اجازه وارد سیستم نشده است.", 14, MUTED, false);
-        p.setPadding(0, dp(10), 0, 0);
-        privacy.addView(p);
-        content.addView(privacy);
-    }
+    private SeekBar slider(int value){SeekBar s=new SeekBar(this);s.setMax(4);s.setProgress(Math.max(0,Math.min(4,value-1)));return s;}
+    private void addMetric(LinearLayout box,String title,SeekBar seek){LinearLayout r=new LinearLayout(this);r.setOrientation(LinearLayout.HORIZONTAL);r.setGravity(Gravity.CENTER_VERTICAL);TextView l=txt(title,14,TEXT,true);r.addView(l,new LinearLayout.LayoutParams(dp(80),-2));r.addView(seek,new LinearLayout.LayoutParams(0,-2,1));TextView val=txt(String.valueOf(seek.getProgress()+1),13,ACCENT,true);val.setGravity(Gravity.CENTER);r.addView(val,new LinearLayout.LayoutParams(dp(34),-2));seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar s,int p,boolean f){val.setText(String.valueOf(p+1));}public void onStartTrackingTouch(SeekBar s){}public void onStopTrackingTouch(SeekBar s){}});box.addView(r);}
+    private void showMe(){clear();selectNav(4);heading("من","Daily Check-in + Memory");SoheilDb.DailyState d=db.todayState();LinearLayout check=card();check.addView(chip("TODAY STATE"));SeekBar mood=slider(d==null?3:d.mood),energy=slider(d==null?3:d.energy),stress=slider(d==null?3:d.stress);gap(check,10);addMetric(check,"Mood",mood);addMetric(check,"Energy",energy);addMetric(check,"Stress",stress);EditText sleep=input("ساعت خواب؛ مثلاً 6.5",false);sleep.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);if(d!=null&&d.sleep>0)sleep.setText(String.valueOf(d.sleep));check.addView(sleep,new LinearLayout.LayoutParams(-1,dp(52)));gap(check,8);EditText note=input("یادداشت کوتاه امروز…",true);if(d!=null)note.setText(d.note);check.addView(note,new LinearLayout.LayoutParams(-1,dp(90)));gap(check,8);Button save=button("ذخیره Check-in",true);save.setOnClickListener(v->{float sl=0;try{sl=Float.parseFloat(sleep.getText().toString());}catch(Exception ignored){}db.saveDailyState(mood.getProgress()+1,energy.getProgress()+1,stress.getProgress()+1,sl,note.getText().toString().trim());Toast.makeText(this,"Check-in ذخیره شد",Toast.LENGTH_SHORT).show();showMe();});check.addView(save,new LinearLayout.LayoutParams(-1,dp(50)));content.addView(check);LinearLayout mem=card();mem.addView(txt("Memory",18,TEXT,true));List<SoheilDb.Memory> memories=db.getRecentMemories(5);if(memories.isEmpty()){TextView e=txt("Memory دائمی هنوز خالی است. از Inbox موارد مهم را به Memory بفرست.",13,MUTED,false);e.setPadding(0,dp(8),0,0);mem.addView(e);}else for(SoheilDb.Memory m:memories){TextView x=txt("• "+m.text,13,TEXT,false);x.setPadding(0,dp(8),0,0);mem.addView(x);}content.addView(mem);LinearLayout sys=card();sys.addView(txt("SOHEIL v0.3-alpha",18,TEXT,true));TextView s=txt("SQLite Brain     فعال\nInbox            "+db.inboxCount()+"\nOpen Tasks       "+db.openTaskCount()+"\nReminders        فعال\nJarvis           Local Context\nCloud AI         مرحله بعد",13,MUTED,false);s.setPadding(0,dp(9),0,0);sys.addView(s);content.addView(sys);}
 }
