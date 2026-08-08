@@ -85,6 +85,7 @@ public final class SoheilCrypto {
                 }
                 sessionDek = dek;
             } else sessionDek = unwrapDek(kek, wrapped);
+            SecuritySelfTest.run(this);
         } catch (Exception e) { lockVault(); throw new SecurityException("SOHEIL vault unlock failed", e); }
     }
 
@@ -121,10 +122,7 @@ public final class SoheilCrypto {
         }catch(Exception e){throw new SecurityException("Vault integrity/authentication check failed",e);}
     }
 
-    /**
-     * Deterministic keyed lookup token. It reveals neither the lookup value nor a useful
-     * brute-force oracle without the in-memory Vault key. Used for exact-match indexes only.
-     */
+    /** Deterministic keyed lookup token for exact-match indexes only. */
     public synchronized String blindIndex(String namespace,String value){
         requireUnlocked();
         try{
