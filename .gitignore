@@ -1,0 +1,29 @@
+# SOHEIL security-sensitive local material
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+*.crt
+.env
+.env.*
+!.env.example
+local.properties
+soheil.properties
+secrets.properties
+*.secret
+*.secrets
+
+# Android/Gradle build output
+.gradle/
+build/
+**/build/
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# OS/editor
+.DS_Store
+Thumbs.db
