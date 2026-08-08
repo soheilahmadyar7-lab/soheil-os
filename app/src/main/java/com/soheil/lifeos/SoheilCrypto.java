@@ -16,6 +16,7 @@ import java.util.Arrays;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
+import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
@@ -99,7 +100,6 @@ public final class SoheilCrypto {
     private String wrapDek(SecretKey kek,byte[] dek)throws Exception{Cipher c=Cipher.getInstance("AES/GCM/NoPadding");c.init(Cipher.ENCRYPT_MODE,kek);byte[] ct=c.doFinal(dek);return b64(c.getIV())+":"+b64(ct);}
     private byte[] unwrapDek(SecretKey kek,String wrapped)throws Exception{String[]p=wrapped.split(":",-1);if(p.length!=2)throw new SecurityException("Invalid wrapped vault key");Cipher c=Cipher.getInstance("AES/GCM/NoPadding");c.init(Cipher.DECRYPT_MODE,kek,new GCMParameterSpec(GCM_TAG_BITS,fromB64(p[0])));byte[]dek=c.doFinal(fromB64(p[1]));if(dek.length!=32){Arrays.fill(dek,(byte)0);throw new SecurityException("Invalid vault key length");}return dek;}
 
-    /** Generic encrypted scalar. Prefer encryptFor() for persisted structured records. */
     public synchronized String encrypt(String plaintext){return encryptFor("generic",plaintext);}
     public synchronized String decrypt(String value){return decryptFor("generic",value);}
 
@@ -121,13 +121,29 @@ public final class SoheilCrypto {
         }catch(Exception e){throw new SecurityException("Vault integrity/authentication check failed",e);}
     }
 
+    /**
+     * Deterministic keyed lookup token. It reveals neither the lookup value nor a useful
+     * brute-force oracle without the in-memory Vault key. Used for exact-match indexes only.
+     */
+    public synchronized String blindIndex(String namespace,String value){
+        requireUnlocked();
+        try{
+            Mac kdf=Mac.getInstance("HmacSHA256");
+            kdf.init(new SecretKeySpec(sessionDek,"HmacSHA256"));
+            byte[]sub=kdf.doFinal(("SOHEIL-BLIND-INDEX-v1:"+(namespace==null?"":namespace)).getBytes(StandardCharsets.UTF_8));
+            Mac mac=Mac.getInstance("HmacSHA256");mac.init(new SecretKeySpec(sub,"HmacSHA256"));
+            byte[]out=mac.doFinal((value==null?"":value).getBytes(StandardCharsets.UTF_8));
+            Arrays.fill(sub,(byte)0);String token=b64(out);Arrays.fill(out,(byte)0);return token;
+        }catch(Exception e){throw new SecurityException("Blind-index generation failed",e);}
+    }
+
     public boolean isEncrypted(String value){return value!=null&&(value.startsWith(LEGACY_PREFIX)||value.startsWith(AAD_PREFIX));}
     public boolean isLegacyEncrypted(String value){return value!=null&&value.startsWith(LEGACY_PREFIX);}
     private void requireUnlocked(){if(sessionDek==null)throw new SecurityException("SOHEIL vault is locked");}
 
     public boolean isHardwareBacked(){try{SecretKey key=getKek();SecretKeyFactory factory=SecretKeyFactory.getInstance(key.getAlgorithm(),KEYSTORE);KeyInfo info=(KeyInfo)factory.getKeySpec(key,KeyInfo.class);return info.isInsideSecureHardware();}catch(Exception ignored){return false;}}
     public boolean strongBoxWasRequested(){return strongBoxRequested;}
-    public String securitySummary(){return"AES-256-GCM/AAD • Vault key wrapped by Android Keystore • "+(isHardwareBacked()?"hardware-backed":"Keystore protected");}
+    public String securitySummary(){return"AES-256-GCM/AAD • keyed blind indexes • Android Keystore • "+(isHardwareBacked()?"hardware-backed":"Keystore protected");}
 
     private static String b64(byte[]b){return Base64.encodeToString(b,Base64.NO_WRAP|Base64.NO_PADDING);}
     private static byte[]fromB64(String s){return Base64.decode(s,Base64.NO_WRAP|Base64.NO_PADDING);}
