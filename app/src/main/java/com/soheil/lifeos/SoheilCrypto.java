@@ -10,7 +10,6 @@ import android.security.keystore.StrongBoxUnavailableException;
 import android.util.Base64;
 
 import java.nio.charset.StandardCharsets;
-import java.security.KeyFactory;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.util.Arrays;
@@ -18,6 +17,7 @@ import java.util.Arrays;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -62,7 +62,6 @@ public final class SoheilCrypto {
                 generateKek(false);
                 strongBoxRequested = false;
             } catch (Exception first) {
-                // Some API 28+ devices advertise StrongBox but reject a specific key policy.
                 generateKek(false);
                 strongBoxRequested = false;
             }
@@ -82,7 +81,6 @@ public final class SoheilCrypto {
                 .setRandomizedEncryptionRequired(true)
                 .setUserAuthenticationRequired(true);
 
-        // Time-limited authorization is used only to unwrap the in-memory Vault DEK.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             b.setUserAuthenticationParameters(
                     30,
@@ -94,7 +92,6 @@ public final class SoheilCrypto {
             b.setUnlockedDeviceRequired(true);
             if (strongBox) b.setIsStrongBoxBacked(true);
         }
-        // Avoid catastrophic vault loss after legitimate biometric enrollment changes.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             b.setInvalidatedByBiometricEnrollment(false);
         }
@@ -132,9 +129,7 @@ public final class SoheilCrypto {
         }
     }
 
-    public synchronized boolean isUnlocked() {
-        return sessionDek != null;
-    }
+    public synchronized boolean isUnlocked() { return sessionDek != null; }
 
     private SecretKey getKek() throws Exception {
         KeyStore ks = KeyStore.getInstance(KEYSTORE);
@@ -173,7 +168,9 @@ public final class SoheilCrypto {
             SecretKeySpec key = new SecretKeySpec(sessionDek, "AES");
             Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
             c.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_BITS, iv));
-            byte[] ct = c.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+            byte[] pt = plaintext.getBytes(StandardCharsets.UTF_8);
+            byte[] ct = c.doFinal(pt);
+            Arrays.fill(pt, (byte) 0);
             return PREFIX + b64(iv) + "." + b64(ct);
         } catch (Exception e) {
             throw new SecurityException("Vault encryption failed", e);
@@ -183,7 +180,7 @@ public final class SoheilCrypto {
     public synchronized String decrypt(String value) {
         requireUnlocked();
         if (value == null) return "";
-        if (!isEncrypted(value)) return value; // legacy migration path only
+        if (!isEncrypted(value)) return value;
         try {
             String[] p = value.substring(PREFIX.length()).split("\\.", -1);
             if (p.length != 2) throw new SecurityException("Invalid ciphertext envelope");
@@ -199,9 +196,7 @@ public final class SoheilCrypto {
         }
     }
 
-    public boolean isEncrypted(String value) {
-        return value != null && value.startsWith(PREFIX);
-    }
+    public boolean isEncrypted(String value) { return value != null && value.startsWith(PREFIX); }
 
     private void requireUnlocked() {
         if (sessionDek == null) throw new SecurityException("SOHEIL vault is locked");
@@ -210,28 +205,21 @@ public final class SoheilCrypto {
     public boolean isHardwareBacked() {
         try {
             SecretKey key = getKek();
-            KeyFactory factory = KeyFactory.getInstance(key.getAlgorithm(), KEYSTORE);
-            KeyInfo info = factory.getKeySpec(key, KeyInfo.class);
+            SecretKeyFactory factory = SecretKeyFactory.getInstance(key.getAlgorithm(), KEYSTORE);
+            KeyInfo info = (KeyInfo) factory.getKeySpec(key, KeyInfo.class);
             return info.isInsideSecureHardware();
         } catch (Exception ignored) {
             return false;
         }
     }
 
-    public boolean strongBoxWasRequested() {
-        return strongBoxRequested;
-    }
+    public boolean strongBoxWasRequested() { return strongBoxRequested; }
 
     public String securitySummary() {
         return "AES-256-GCM • Vault key wrapped by Android Keystore • " +
                 (isHardwareBacked() ? "hardware-backed" : "Keystore protected");
     }
 
-    private static String b64(byte[] b) {
-        return Base64.encodeToString(b, Base64.NO_WRAP | Base64.NO_PADDING);
-    }
-
-    private static byte[] fromB64(String s) {
-        return Base64.decode(s, Base64.NO_WRAP | Base64.NO_PADDING);
-    }
+    private static String b64(byte[] b) { return Base64.encodeToString(b, Base64.NO_WRAP | Base64.NO_PADDING); }
+    private static byte[] fromB64(String s) { return Base64.decode(s, Base64.NO_WRAP | Base64.NO_PADDING); }
 }
