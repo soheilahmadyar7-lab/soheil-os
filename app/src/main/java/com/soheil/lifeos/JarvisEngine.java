@@ -2,11 +2,13 @@ package com.soheil.lifeos;
 
 import java.util.List;
 
+/** Local Jarvis engine. Every data-domain access is auditable. */
 public class JarvisEngine {
     private final SoheilDb db;
     public JarvisEngine(SoheilDb db){this.db=db;}
 
     public String morningBrief(String focus){
+        db.auditAccess("DAILY_STATE,TASKS,INBOX","MORNING_BRIEF");
         int tasks=db.openTaskCount(); int inbox=db.inboxCount(); SoheilDb.DailyState s=db.todayState();
         StringBuilder b=new StringBuilder();
         if(s==null) b.append("Check-in امروز هنوز ثبت نشده. ");
@@ -22,6 +24,7 @@ public class JarvisEngine {
         SoheilDb.DailyState s=db.todayState();
         List<SoheilDb.Task> tasks=db.getOpenTasks(5);
         SoheilDb.Capture cap=db.latestCapture();
+        db.auditAccess("DAILY_STATE,TASKS,INBOX","LOCAL_JARVIS_QUERY");
         StringBuilder a=new StringBuilder();
 
         if(query.contains("امروز")||query.contains("تمرکز")||query.contains("چی کار")||query.contains("چه کار")){
@@ -34,6 +37,7 @@ public class JarvisEngine {
             a.append("الان ").append(db.inboxCount()).append(" مورد پردازش‌نشده در Inbox داری. ");
             if(cap!=null) a.append("آخرین Capture: «").append(cap.text).append("». "); a.append("هر مورد را به Task، Memory یا Done تبدیل کن.");
         } else if(query.contains("حافظ")||query.contains("یاد")||query.contains("memory")){
+            db.auditAccess("MEMORY","LOCAL_JARVIS_MEMORY_QUERY");
             List<SoheilDb.Memory> memories=db.getRecentMemories(3);
             if(memories.isEmpty()) a.append("هنوز Memory دائمی ثبت نکرده‌ای. از Inbox یک مورد را به Memory تبدیل کن.");
             else {a.append("سه Memory اخیر: ");for(int i=0;i<memories.size();i++){if(i>0)a.append(" | ");a.append(memories.get(i).text);} }
@@ -41,9 +45,10 @@ public class JarvisEngine {
             if(s==null) a.append("Check-in امروز ثبت نشده. از بخش Me وضعیت امروز را وارد کن.");
             else a.append("امروز Mood ").append(s.mood).append("/5، Energy ").append(s.energy).append("/5، Stress ").append(s.stress).append("/5 و Sleep ").append(String.format(java.util.Locale.US,"%.1f",s.sleep)).append("h ثبت شده.");
         } else {
+            db.auditAccess("MEMORY","LOCAL_JARVIS_SEMANTIC_FALLBACK");
             String keyword=longestWord(query); List<SoheilDb.Memory> found=keyword.length()>2?db.searchMemories(keyword,3):db.getRecentMemories(2);
             if(!found.isEmpty()){ a.append("در حافظه SOHEIL چیزی مرتبط پیدا کردم: "); for(int i=0;i<found.size();i++){if(i>0)a.append(" | ");a.append(found.get(i).text);} }
-            else a.append("برای این سؤال هنوز Context کافی در حافظه محلی ندارم. Capture و Taskهای بیشتری ثبت کن؛ در نسخه AI آنلاین تحلیل معنایی عمیق‌تر اضافه می‌شود.");
+            else a.append("برای این سؤال هنوز Context کافی در حافظه محلی ندارم. Capture و Taskهای بیشتری ثبت کن.");
         }
         return a.toString();
     }
