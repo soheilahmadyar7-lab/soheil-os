@@ -8,7 +8,31 @@ android {
         applicationId 'com.soheil.lifeos'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '0.3-alpha'
+        versionCode 4
+        versionName '0.3.1-security'
     }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        debug {
+            // Security-test APKs are intentionally non-debuggable even though they use test signing.
+            debuggable false
+            minifyEnabled false
+        }
+        release {
+            debuggable false
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Production signing is injected only from CI secrets; never from source control.
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.biometric:biometric:1.1.0'
 }
