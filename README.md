@@ -1,81 +1,87 @@
 # SOHEIL — Life OS
-### v0.2.0 · Jarvis Brain foundation
+### v0.3.1-security · Private Life Vault foundation
 
 **SOHEIL** is a local-first personal Life Operating System. **Jarvis** is its intelligence layer.
 
-v0.2 turns the v0.1 planner into the first real cognitive architecture: long-term memory, context selection, persistent Jarvis conversation, confirmation-gated actions, and an optional secure AI backend.
+The current security release establishes a durable security boundary before connected AI, Health, Calendar, voice or cloud sync are introduced.
 
-## What works in v0.2
+## Current product
 
-- **Today** — open tasks + current daily state
-- **Capture / Inbox** — fast capture of notes, tasks, questions, and ideas
-- **Life Areas** — Health, Learning, Work, Relationships, Finance, Personal
-- **Daily State** — mood, energy, stress, sleep, short daily note
-- **Long-term Memory** — local Room/SQLite memory store
-- **Memory Retrieval** — deterministic on-device relevance ranking before AI context is built
-- **Context Engine** — sends only selected tasks, state, memories, inbox items and recent conversation
-- **Jarvis Conversation** — persistent local conversation history
-- **Action Proposals** — AI can propose CREATE_TASK / SAVE_MEMORY / CAPTURE; Android requires explicit approval before any write is executed
-- **Local Jarvis fallback** — useful deterministic behavior even with no internet/backend
-- **Optional Remote AI** — Android → SOHEIL backend → OpenAI Responses API
-- **v1 → v2 Room migration** — existing v0.1 data is preserved
-- **Persian-first / RTL UI**
+- Today / Focus dashboard
+- Capture + encrypted Inbox
+- encrypted Tasks and Memories
+- private reminders
+- encrypted Daily Check-in
+- persistent encrypted Jarvis Local conversation
+- local context-aware Jarvis
+- Security Center
 
-## Architecture
+## Security baseline
+
+SOHEIL follows a defense-in-depth design aligned to OWASP MASVS categories.
+
+- **Vault encryption:** AES-256-GCM authenticated encryption with fresh nonce per record.
+- **Context binding:** GCM AAD binds ciphertext to record type, opaque record key and timestamp.
+- **Key hierarchy:** random 256-bit Vault DEK wrapped by a user-authenticated Android Keystore KEK.
+- **Hardware protection:** StrongBox requested where available; Android Keystore/TEE fallback otherwise.
+- **Authentication:** AndroidX BiometricPrompt with strong biometric or device credential.
+- **Session:** manual lock, background auto-lock, inactivity auto-lock, in-memory key zeroization.
+- **Metadata minimization:** security-relevant task/state fields live inside encrypted authenticated payloads; exact private lookups use keyed blind indexes.
+- **Screen privacy:** FLAG_SECURE, recents screenshot protection, overlay/tapjacking mitigations, autofill and IME personalized-learning restrictions.
+- **Backup:** automatic cloud/device-transfer extraction of the Vault is disabled.
+- **Notifications:** no private task content is placed on the lock screen.
+- **Network:** current app has no INTERNET permission; cleartext HTTP is blocked by policy for future networking.
+- **Jarvis:** remote domain access is default-deny; high-sensitivity domains require explicit per-request consent when connected AI is later introduced.
+- **Secrets:** signing keys/API keys/private keys are prohibited from source control.
+- **CI:** permission allowlist, security invariant gate, CodeQL, Dependabot, APK signature verification.
+
+See [`docs/SECURITY_ARCHITECTURE.md`](docs/SECURITY_ARCHITECTURE.md) for the threat model and long-term invariants.
+
+## Important security reality
+
+No application can be made permanently immune to future vulnerabilities. Android, dependencies, cryptographic recommendations and attack techniques evolve. SOHEIL's architecture is designed so security controls remain centralized and inherited by future features, while vulnerability patches, dependency maintenance and key/certificate rotation remain mandatory security maintenance.
+
+A fully compromised/rooted device while the Vault is actively unlocked is outside the guarantee boundary. Root indicators are advisory, not treated as an unbreakable defense.
+
+SOHEIL is **not an EMR/EHR** and should not be used for identifiable patient records until a separate jurisdiction-specific regulatory/compliance architecture exists.
+
+## Data recovery
+
+Automatic portable backup is intentionally disabled because the local Keystore key is device-bound. Until a separate user-controlled encrypted export/recovery feature is implemented, uninstalling SOHEIL, clearing app data, factory-resetting or losing the device can make local Vault data unrecoverable.
+
+## Builds
+
+### Security-test build
+
+GitHub Actions builds a non-debuggable **test-signed** APK. It is appropriate for functional/security testing on a real device, but the test signing certificate is not the permanent production identity.
+
+### Production release
+
+The release pipeline requires a dedicated SOHEIL signing keystore supplied only through CI secrets. Release builds are non-debuggable, R8-minified/shrunk and signature-verified. The private signing key must never be committed to Git.
+
+Required CI secrets:
+
+- `SOHEIL_KEYSTORE_B64`
+- `SOHEIL_KEYSTORE_PASSWORD`
+- `SOHEIL_KEY_ALIAS`
+- `SOHEIL_KEY_PASSWORD`
+
+## Future connected architecture
 
 ```text
-Jetpack Compose UI
+User authentication
         ↓
-SoheilViewModel
+Encrypted local SOHEIL Vault
         ↓
-Repository
-   ↙         ↘
-Room DB      JarvisOrchestrator
-                ↓
-       Context + Memory selection
-           ↙             ↘
-   Local Jarvis      Remote Gateway
-                          ↓
-                  SOHEIL backend
-                          ↓
-                  OpenAI Responses API
+Permission / Jarvis Access policy
+        ↓
+Minimum Necessary Context selector
+        ↓
+Secure allowlisted HTTPS network layer
+        ↓
+SOHEIL backend (provider secrets server-side only)
+        ↓
+External AI/provider
 ```
 
-The local database remains the source of truth. The model never receives the complete database.
-
-## Security rules
-
-1. **Never put an OpenAI API key in the Android app.** It belongs only on the backend.
-2. AI writes are **proposal-only** in v0.2. The user confirms them before execution.
-3. `SOHEIL_BACKEND_TOKEN` is only a private-prototype gate; because it is shipped to the client it is not a production secret. Replace it with real user authentication / authorization before public deployment.
-4. Release deployment should use HTTPS only.
-5. The backend intentionally does not log the user's message or selected life context.
-
-See `docs/SECURITY.md`.
-
-## Build requirements
-
-- Android Studio Quail 2 / compatible
-- JDK 17+
-- Android SDK 37
-- AGP 9.3.0
-- Gradle 9.5.0
-
-### Android only — local mode
-
-Open the root folder in Android Studio, sync Gradle, and run the `app` configuration. No backend is required; Jarvis automatically uses Local Mode.
-
-### Enable Remote AI
-
-1. Start the backend in `server/` (see `server/README.md`).
-2. Copy `soheil.properties.example` to `soheil.properties`.
-3. Set `SOHEIL_BACKEND_URL` and the same prototype backend token.
-4. Rebuild the Android app.
-
-For the Android emulator, host-machine localhost is usually `http://10.0.2.2:8787`.
-
-## Product boundary of v0.2
-
-This version intentionally does **not** yet include voice, notifications, Calendar/Health Connect, embeddings/vector search, cloud sync, encryption-at-rest hardening, or autonomous background agents. Those belong to later versions after the memory/action contract is stable.
-
-See `docs/ROADMAP.md` and `docs/JARVIS_BRAIN.md`.
+Cloud sync and remote AI are separate security domains. Future sync should prefer client-side encrypted blobs; remote AI must never receive the entire Vault by default.
