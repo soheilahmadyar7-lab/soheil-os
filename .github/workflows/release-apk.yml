@@ -1,0 +1,62 @@
+name: Release SOHEIL APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require release secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.SOHEIL_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.SOHEIL_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SOHEIL_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SOHEIL_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_B64" || (echo "Missing SOHEIL_KEYSTORE_B64" && exit 1)
+          test -n "$STORE_PASSWORD" || (echo "Missing SOHEIL_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "Missing SOHEIL_KEY_ALIAS" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "Missing SOHEIL_KEY_PASSWORD" && exit 1)
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Decode signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.SOHEIL_KEYSTORE_B64 }}
+        run: |
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/soheil-release.jks"
+          chmod 600 "$RUNNER_TEMP/soheil-release.jks"
+      - name: Build signed hardened release
+        env:
+          SOHEIL_KEYSTORE_PATH: ${{ runner.temp }}/soheil-release.jks
+          SOHEIL_KEYSTORE_PASSWORD: ${{ secrets.SOHEIL_KEYSTORE_PASSWORD }}
+          SOHEIL_KEY_ALIAS: ${{ secrets.SOHEIL_KEY_ALIAS }}
+          SOHEIL_KEY_PASSWORD: ${{ secrets.SOHEIL_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --stacktrace
+      - name: Verify signature
+        run: |
+          apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+          cp app/build/outputs/apk/release/app-release.apk SOHEIL-v0.3.1-security-release.apk
+          sha256sum SOHEIL-v0.3.1-security-release.apk > SOHEIL-v0.3.1-security-release.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SOHEIL-v0.3.1-security-release
+          path: |
+            SOHEIL-v0.3.1-security-release.apk
+            SOHEIL-v0.3.1-security-release.sha256
+          retention-days: 30
+      - name: Destroy runner signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/soheil-release.jks"
