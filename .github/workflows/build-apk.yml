@@ -1,15 +1,20 @@
-name: Build SOHEIL APK
+name: Build SOHEIL Security Test APK
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Security invariant gate
+        run: bash security/security_gate.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -20,11 +25,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK
+      - name: Build non-debuggable security-test APK
         run: gradle :app:assembleDebug --stacktrace
-      - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk SOHEIL-v0.3-alpha.apk
+      - name: Verify and package APK
+        run: |
+          apksigner verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk SOHEIL-v0.3.1-security-test.apk
+          sha256sum SOHEIL-v0.3.1-security-test.apk > SOHEIL-v0.3.1-security-test.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: SOHEIL-v0.3-alpha-apk
-          path: SOHEIL-v0.3-alpha.apk
+          name: SOHEIL-v0.3.1-security-test
+          path: |
+            SOHEIL-v0.3.1-security-test.apk
+            SOHEIL-v0.3.1-security-test.sha256
+          retention-days: 14
