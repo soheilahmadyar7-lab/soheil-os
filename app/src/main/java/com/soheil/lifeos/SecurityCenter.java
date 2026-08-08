@@ -20,8 +20,10 @@ public final class SecurityCenter {
     public static void hardenWindow(Activity activity) {
         Window w = activity.getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        if (Build.VERSION.SDK_INT >= 31) w.setHideOverlayWindows(true);
         if (Build.VERSION.SDK_INT >= 33) activity.setRecentsScreenshotEnabled(false);
         View decor = w.getDecorView();
+        decor.setFilterTouchesWhenObscured(true);
         if (Build.VERSION.SDK_INT >= 26) {
             decor.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         }
@@ -53,6 +55,7 @@ public final class SecurityCenter {
         return "Vault: " + (crypto.isUnlocked() ? "UNLOCKED" : "LOCKED") +
                 "\nCrypto: " + crypto.securitySummary() +
                 "\nScreen shield: ON" +
+                "\nOverlay shield: " + (Build.VERSION.SDK_INT >= 31 ? "ON" : "legacy mitigation") +
                 "\nAuto-backup: OFF" +
                 "\nCleartext network: BLOCKED" +
                 "\nBuild: " + (isDebuggable(c) ? "TEST/DEBUG" : "HARDENED") +
