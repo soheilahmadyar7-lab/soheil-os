@@ -13,6 +13,6 @@ jobs:
   invariants:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify security invariants
         run: bash security/security_gate.sh
